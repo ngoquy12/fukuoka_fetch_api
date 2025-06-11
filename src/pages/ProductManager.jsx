@@ -1,98 +1,171 @@
-import { Button, Checkbox, Form, Input, InputNumber, Select } from "antd";
+import { Button, Image, message, Modal, Table } from "antd";
 import { useEffect, useState } from "react";
-import http from "../utils/http";
+import FormProductManager from "../components/product/FormProductManager";
+import { formatMoney } from "../utils/formatData";
+import { deleteProductById, getAllProduct } from "../apis/product.api";
+import { HttpStatusCode } from "axios";
 
 export default function ProductManager() {
-  const [categories, setCategories] = useState([]);
-  // Lấy được danh sách danh mục và render ra ngoài giao diện
+  const [isShowForm, setIsShowForm] = useState(false); // State quản lý trạng thái mở/đóng form
+  const [products, setProducts] = useState([]);
+  const [isShowModalDelete, setIsShowModalDelete] = useState(false);
+  const [productId, setProductId] = useState(null);
+
+  const fetchProduct = async () => {
+    try {
+      const response = await getAllProduct();
+
+      setProducts(response.data.content);
+    } catch (error) {
+      console.log("Error: ", error);
+    }
+  };
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await http.get("admin/categories");
-
-        //   Cập nhật state categories
-        if (response.data) {
-          setCategories(response.data.content);
-        }
-      } catch (error) {
-        const statusCode = error?.response?.status;
-
-        switch (statusCode) {
-          case 401:
-            alert("Bạn chưa đăng nhập");
-            return;
-
-          case 403:
-            alert("Bạn không có quyền truy cập vào tài nguyên này");
-            return;
-
-          default:
-            alert("Đã có lỗi xảy ra. Vui lòng đăng nhập lại");
-            return;
-        }
-      }
-    };
-
-    fetchCategories();
+    fetchProduct();
   }, []);
 
-  console.log("categories: ", categories);
+  // Hàm mở form
+  const handleShowForm = () => {
+    setIsShowForm(true);
+  };
 
-  const onFinish = (values) => {
-    console.log("Success:", values);
+  // Hàm đóng form
+  const handleHiddenForm = () => {
+    setIsShowForm(false);
+
+    // Reset lại productId
+    setProductId(null);
   };
-  const onFinishFailed = (errorInfo) => {
-    console.log("Failed:", errorInfo);
+
+  // Hàm mở modal xác nhận xóa
+  const handleShowModalDelete = (id) => {
+    // Cập nhật lại id
+    setProductId(id);
+
+    setIsShowModalDelete(true);
   };
+
+  // Hàm đóng modal xác nhận xóa
+  const handleHiddenModalDelete = () => {
+    setIsShowModalDelete(false);
+
+    // Reset lại productId vừa xóa
+    setProductId(null);
+  };
+
+  // Hàm xóa sản phẩm
+  const handleDeleteProduct = async () => {
+    try {
+      const response = await deleteProductById(productId);
+
+      if (response.status === HttpStatusCode.Ok) {
+        // Hiển thị thông báo thành công
+        message.success(response.data);
+
+        // Đóng modal xác nhận xóa
+        handleHiddenModalDelete();
+
+        // Load lại dữ liệu
+        fetchProduct();
+      }
+    } catch (error) {
+      console.log("Error: ", error);
+    }
+  };
+
+  // Hàm mở modal cập nhật dữ liệu
+  const handleShowModalUpdate = (id) => {
+    // Cập nhật lại state mở modal
+    setIsShowForm(true);
+
+    // Cập nhật lại productId
+    setProductId(id);
+  };
+
+  const columns = [
+    {
+      width: 100,
+      title: "Hình ảnh",
+      dataIndex: "image",
+      render: (image) => <Image src={image} height={40} width={50} />,
+    },
+    {
+      width: 300,
+      title: "Tên sản phẩm",
+      dataIndex: "name",
+    },
+    {
+      width: 200,
+      title: "Giá",
+      dataIndex: "price",
+      render: (price) => (
+        <div className="font-semibold">{formatMoney(price)}</div>
+      ),
+    },
+    {
+      width: 150,
+      title: "Số lượng",
+      dataIndex: "quantity",
+    },
+    {
+      width: 200,
+      title: "Danh mục",
+      dataIndex: ["category", "name"],
+    },
+    {
+      width: 200,
+      title: "Chức năng",
+      render: (_, record) => (
+        <div className="flex gap-2">
+          <Button onClick={() => handleShowModalUpdate(record.id)}>Sửa</Button>
+          <Button onClick={() => handleShowModalDelete(record.id)}>Xóa</Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div>
-      <Form
-        name="basic"
-        initialValues={{ remember: true }}
-        onFinish={onFinish}
-        onFinishFailed={onFinishFailed}
-        autoComplete="off"
-        layout="vertical"
+    <>
+      {/* Modal form thêm mới / cập nhật sản phẩm */}
+      <Modal
+        footer={false}
+        onCancel={handleHiddenForm}
+        title={`${productId ? "Cập nhật" : "Thêm mới"} sản phẩm`}
+        open={isShowForm}
+        maskClosable={false}
+        destroyOnHidden={true}
       >
-        <Form.Item label="Tên sản phẩm" name="name">
-          <Input />
-        </Form.Item>
+        <FormProductManager
+          productId={productId}
+          onHiddenForm={handleHiddenForm}
+          onLoadProduct={fetchProduct}
+        />
+      </Modal>
 
-        <Form.Item label="Hình ảnh" name="image">
-          <Input />
-        </Form.Item>
+      {/* Modal xác nhận xóa */}
+      <Modal
+        onOk={handleDeleteProduct}
+        onCancel={handleHiddenModalDelete}
+        cancelText="Hủy"
+        okText="Xóa"
+        title="Xác nhận xóa"
+        open={isShowModalDelete}
+      >
+        <p>Bạn có chắc chắn muốn xóa sản phẩm này không?</p>
+      </Modal>
 
-        <Form.Item label="Giá" name="price">
-          <InputNumber min={0} style={{ width: "100%" }} />
-        </Form.Item>
+      <div className="m-[50px]">
+        <div className="flex items-center justify-between mb-3">
+          <h3>Sản phẩm</h3>
+          <Button onClick={handleShowForm}>Thêm mới sản phẩm</Button>
+        </div>
 
-        <Form.Item label="Số lượng" name="quantity">
-          <InputNumber min={0} style={{ width: "100%" }} />
-        </Form.Item>
-
-        <Form.Item label="Danh mục" name="categoryId">
-          <Select
-            showSearch
-            optionFilterProp="label"
-            allowClear
-            placeholder="Chọn tên danh mục"
-            style={{ width: "100%" }}
-            options={categories.map((category) => {
-              return {
-                value: category.id,
-                label: category.name,
-              };
-            })}
-          />
-        </Form.Item>
-
-        <Form.Item label={null}>
-          <Button type="primary" htmlType="submit">
-            Submit
-          </Button>
-        </Form.Item>
-      </Form>
-    </div>
+        {/* Danh sách sản phẩm */}
+        <div>
+          <Table columns={columns} dataSource={products} rowKey={"id"} />
+        </div>
+      </div>
+    </>
   );
 }
